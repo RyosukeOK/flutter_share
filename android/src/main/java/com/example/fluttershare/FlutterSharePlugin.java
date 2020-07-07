@@ -16,6 +16,14 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.common.PluginRegistry.Registrar;
 
+import android.content.pm.PackageManager;
+import android.content.Context;
+
+import java.util.List;
+import java.util.Collections;
+
+import android.content.pm.ResolveInfo;
+import android.content.pm.LabeledIntent;
 
 /** FlutterSharePlugin */
 public class FlutterSharePlugin implements MethodCallHandler {
@@ -53,40 +61,64 @@ public class FlutterSharePlugin implements MethodCallHandler {
             String linkUrl = call.argument("linkUrl");
             String chooserTitle = call.argument("chooserTitle");
 
-            if (title == null || title.isEmpty())
-            {
-                Log.println(Log.ERROR, "", "FlutterShare Error: Title null or empty");
-                result.error("FlutterShare: Title cannot be null or empty", null, null);
-                return;
-            }
-
-            ArrayList<String> extraTextList = new ArrayList<>();
-
-            if (text != null && !text.isEmpty()) {
-                extraTextList.add(text);
-            }
-            if (linkUrl != null && !linkUrl.isEmpty()) {
-                extraTextList.add(linkUrl);
-            }
-
-            String extraText = "";
-
-            if (!extraTextList.isEmpty()) {
-                extraText = TextUtils.join("\n\n", extraTextList);
-            }
+//            if (title == null || title.isEmpty())
+//            {
+//                Log.println(Log.ERROR, "", "FlutterShare Error: Title null or empty");
+//                result.error("FlutterShare: Title cannot be null or empty", null, null);
+//                return;
+//            }
 
             Intent intent = new Intent();
             intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             intent.setAction(Intent.ACTION_SEND);
             intent.setType("text/plain");
-            intent.putExtra(Intent.EXTRA_SUBJECT, title);
-            intent.putExtra(Intent.EXTRA_TEXT, extraText);
+//            intent.putExtra(Intent.EXTRA_SUBJECT, title);
 
-            Intent chooserIntent = Intent.createChooser(intent, chooserTitle);
-            chooserIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            chooserIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            mRegistrar.context().startActivity(chooserIntent);
+            String textWithHashTags = linkUrl + " " + text;
+//            intent.putExtra(Intent.EXTRA_TEXT, textDefault);
+
+            PackageManager pm = mRegistrar.context().getPackageManager();
+            List<ResolveInfo> resolveInfoList = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
+
+            if (resolveInfoList.isEmpty()) {
+                mRegistrar.context().startActivity(Intent.createChooser(intent, chooserTitle));
+            } else {
+                List<LabeledIntent> shareIntentList = new ArrayList<>();
+                Collections.sort(resolveInfoList, new ResolveInfo.DisplayNameComparator(mRegistrar.context().getPackageManager()));
+                for (ResolveInfo resolveInfo : resolveInfoList) {
+                    Intent shareIntent = new Intent(intent);
+
+                    String packageName = resolveInfo.activityInfo.packageName;
+                    switch (packageName) {
+                        case "com.facebook.katana":
+                            shareIntent.putExtra(Intent.EXTRA_TEXT, textWithHashTags);
+                            break;
+                        case "com.twitter.android":
+                            shareIntent.putExtra(Intent.EXTRA_TEXT, textWithHashTags);
+                            break;
+                        default:
+                            shareIntent.putExtra(Intent.EXTRA_TEXT, linkUrl);
+                            break;
+                    }
+
+                    // これがないと一覧表示時のラベルが変になる
+                    shareIntent.setClassName(packageName, resolveInfo.activityInfo.name);
+                    shareIntentList.add(
+                            new LabeledIntent(shareIntent, packageName, resolveInfo.loadLabel(pm), resolveInfo.icon));
+                }
+
+                // ここでリストの最後のものをとってこないと、並び順が変になる
+                Intent chooserIntent = Intent.createChooser(shareIntentList.remove(shareIntentList.size() - 1), chooserTitle);
+                chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, shareIntentList.toArray(new LabeledIntent[shareIntentList.size()]));
+                chooserIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                mRegistrar.context().startActivity(chooserIntent);
+            }
+
+//            Intent chooserIntent = Intent.createChooser(intent, chooserTitle);
+//            chooserIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+//            chooserIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+//            mRegistrar.context().startActivity(chooserIntent);
 
             result.success(true);
         }

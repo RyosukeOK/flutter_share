@@ -13,11 +13,26 @@ class MyApp extends StatelessWidget {
   final _controller = ScreenshotController();
 
   Future<void> share() async {
+
+    Directory directory;
+    if (Platform.isAndroid) {
+      directory = await getExternalStorageDirectory();
+    } else {
+      directory = await getApplicationDocumentsDirectory();
+    }
+    final String localPath =
+        '${directory.path}/${DateTime.now().toIso8601String()}.jpg';
+
+    await _controller.capture(path: localPath);
+
+    await Future.delayed(Duration(seconds: 1));
+
     await FlutterShare.share(
-        title: 'Example share',
-        text: 'Example share text',
-        linkUrl: 'https://flutter.dev/',
-        chooserTitle: 'Example Chooser Title');
+        title: 'Akasaのプロフィールリンクです！',
+        filePath: localPath,
+        text: '#BrawlStars #BrawlShare',
+        linkUrl: 'https://link.brawlshare.com/AvPa',
+        chooserTitle: 'Share'); // HACK
   }
 
   Future<void> shareFile() async {
